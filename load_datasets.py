@@ -8,9 +8,18 @@ def load_datasets():
     dd_path = 'BioSNAP/DD-Miner_miner-disease-disease.tsv'
     dg_path = 'BioSNAP/DG-AssocMiner_miner-disease-gene.tsv'
     mapping_path = 'BioSNAP/disease_mappings.tsv'
-    # Load and display the first few rows of each file to understand their structure
-    ppi_data = pd.read_csv(ppi_path, header=None, names=['Gene 1', 'Gene 2'], skiprows=lambda i: np.random.rand() > 0.01)
-    dd_data = pd.read_csv(dd_path, sep='\t', skiprows=lambda i: i > 0 and np.random.rand() > 0.1)
+    # Load datasets
+    ppi_data = pd.read_csv(ppi_path, header=None, names=['Gene ID 1', 'Gene ID 2'], skiprows=lambda i: np.random.rand() > 0.01)
+    # Create a unique set of genes
+    unique_genes = pd.concat([ppi_data['Gene ID 1'], ppi_data['Gene ID 2']]).unique()
+
+    gene_to_index = {gene: idx for idx, gene in enumerate(unique_genes)}
+
+    # Map the genes to indices in the DataFrame
+    ppi_data['Gene 1'] = ppi_data['Gene ID 1'].map(gene_to_index)
+    ppi_data['Gene 2'] = ppi_data['Gene ID 2'].map(gene_to_index)
+
+    dd_data = pd.read_csv(dd_path, sep='\t')
     dg_data = pd.read_csv(dg_path, sep='\t')
     mapping_data = pd.read_csv(mapping_path, sep='\t')
 

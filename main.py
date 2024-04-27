@@ -1,10 +1,16 @@
 from build_networks import build_networks
 from load_datasets import load_datasets
+from run_vgae import run_vgae
 
 
 def main():
     ppi_data, dd_data, dg_data = load_datasets()
-    build_networks(ppi_data, dd_data, dg_data)
+    (ppi_graph, dd_graph, dg_graph, integrated_network,
+     ppi_data, dd_data, dg_data) = build_networks(ppi_data, dd_data, dg_data)
+
+    epoch = 100
+
+    run_vgae(ppi_data, epoch)
 
 
 if __name__ == "__main__":
