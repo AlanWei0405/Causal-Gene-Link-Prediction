@@ -8,7 +8,7 @@ def main():
     (ppi_graph, dd_graph, dg_graph, integrated_network,
      ppi_data, dd_data, dg_data) = build_networks(ppi_data, dd_data, dg_data)
 
-    epoch = 100
+    epoch = 200
 
     run_vgae(ppi_data, epoch)
 

@@ -25,13 +25,8 @@ def build_networks(ppi_data, dd_data, dg_data):
 
     dd_features_df = feature_matrix(dd_graph)
 
-    # Filter the Disease-Gene Data
-    # Filter diseases and genes based on what's available in disease-disease and gene-gene networks
-    filtered_dg_data = dg_data[(dg_data['Disease ID'].isin(dd_graph.nodes)) &
-                               (dg_data['Gene ID'].isin(ppi_graph.nodes))]
-
     # Construct the Disease-Gene Network
-    dg_graph = nx.from_pandas_edgelist(filtered_dg_data, 'Disease ID', 'Gene ID', create_using=nx.Graph())
+    dg_graph = nx.from_pandas_edgelist(dg_data, 'Disease ID', 'Gene ID', create_using=nx.Graph())
 
     dg_features_df = feature_matrix(dg_graph)
 
@@ -42,20 +37,22 @@ def build_networks(ppi_data, dd_data, dg_data):
     integrated_network.add_edges_from(dd_graph.edges(data=True))
     integrated_network.add_edges_from(ppi_graph.edges(data=True))
 
-    # Now add the disease-gene interactions
-    integrated_network.add_edges_from(filtered_dg_data[['Disease ID', 'Gene ID']].itertuples(index=False, name=None))
+    integrated_network.add_edges_from(dg_data[['Disease ID', 'Gene ID']].itertuples(index=False, name=None))
 
     ppi_edge_index = torch.tensor(ppi_data[['Gene 1', 'Gene 2']].values, dtype=torch.long).t().contiguous()
     ppi_x = torch.tensor(ppi_features_df.to_numpy(), dtype=torch.float)
     ppi_data = Data(x=ppi_x, edge_index=ppi_edge_index)
 
-    # dd_edge_index = torch.tensor(dd_graph.edges.values, dtype=torch.long).t().contiguous()
-    # dd_x = torch.tensor(dd_features_df, dtype=torch.float)
-    # dd_data = Data(x=dd_x, edge_index=dd_edge_index)
-    #
-    # dg_edge_index = torch.tensor(dg_graph.edges.values, dtype=torch.long).t().contiguous()
-    # dg_x = torch.tensor(dg_features_df, dtype=torch.float)
-    # dg_data = Data(x=dg_x, edge_index=dg_edge_index)
+    dd_edge_index = torch.tensor(dd_data[['Disease 1', 'Disease 2']].values, dtype=torch.long).t().contiguous()
+    dd_x = torch.tensor(dd_features_df.to_numpy(), dtype=torch.float)
+    dd_data = Data(x=dd_x, edge_index=dd_edge_index)
+
+    dg_edge_index = torch.tensor(dg_data[['Disease', 'Gene']].values, dtype=torch.long).t().contiguous()
+    dg_x = torch.tensor(dg_features_df.to_numpy(), dtype=torch.float)
+    dg_data = Data(x=dg_x, edge_index=dg_edge_index)
+
+    dgt_edge_index = dg_edge_index[[1, 0], :]
+    dgt_data = Data(x=dg_x, edge_index=dgt_edge_index)
 
     # print("ppi network:")
     # print(ppi_graph)
@@ -67,7 +64,7 @@ def build_networks(ppi_data, dd_data, dg_data):
     # print(integrated_network)
 
     return (ppi_graph, dd_graph, dg_graph, integrated_network,
-            ppi_data, dd_data, dg_data)
+            ppi_data, dd_data, dg_data, dgt_data)
 
 
 def feature_matrix(graph):

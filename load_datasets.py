@@ -9,7 +9,7 @@ def load_datasets():
     dg_path = 'BioSNAP/DG-AssocMiner_miner-disease-gene.tsv'
     mapping_path = 'BioSNAP/disease_mappings.tsv'
     # Load datasets
-    ppi_data = pd.read_csv(ppi_path, header=None, names=['Gene ID 1', 'Gene ID 2'], skiprows=lambda i: np.random.rand() > 0.01)
+    ppi_data = pd.read_csv(ppi_path, header=None, names=['Gene ID 1', 'Gene ID 2'])
     # Create a unique set of genes
     unique_genes = pd.concat([ppi_data['Gene ID 1'], ppi_data['Gene ID 2']]).unique()
 
@@ -42,7 +42,24 @@ def load_datasets():
     dd_data['Disease ID2'] = dd_data['Disease 2 DOID'].map(disease_id_to_code)
 
     # Drop rows where either 'DiseaseID1' or 'DiseaseID2' is NaN
-    dd_data_filtered = dd_data.dropna(subset=['Disease ID1', 'Disease ID2'])
+    dd_data_filtered = dd_data.dropna(subset=['Disease ID1', 'Disease ID2']).copy()
+
+    # Create a unique set of genes
+    unique_diseases = pd.concat([dd_data_filtered['Disease ID1'], dd_data_filtered['Disease ID2']]).unique()
+
+    disease_to_index = {disease: idx for idx, disease in enumerate(unique_diseases)}
+
+    # Map the genes to indices in the DataFrame
+    dd_data_filtered['Disease 1'] = dd_data_filtered['Disease ID1'].map(disease_to_index)
+    dd_data_filtered['Disease 2'] = dd_data_filtered['Disease ID2'].map(disease_to_index)
+
+    # Filter the Disease-Gene Data
+    # Filter diseases and genes based on what's available in disease-disease and gene-gene networks
+    dg_data = dg_data[(dg_data['Disease ID'].isin(unique_diseases)) & (dg_data['Gene ID'].isin(unique_genes))]
+
+    # Map the genes to indices in the DataFrame
+    dg_data['Gene'] = dg_data['Gene ID'].map(gene_to_index)
+    dg_data['Disease'] = dg_data['Disease ID'].map(disease_to_index)
 
     # Display the data
     # print("Protein-Protein Interaction Data:")
