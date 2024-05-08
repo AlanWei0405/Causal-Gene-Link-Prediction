@@ -4,7 +4,9 @@ import torch
 from torch import nn, Tensor
 from torch.nn import Module
 from torch_geometric.nn import VGAE, GCNConv
+from torch_geometric.nn.models.autoencoder import EPS, MAX_LOGSTD
 from torch_geometric.utils import negative_sampling
+from sklearn.metrics import average_precision_score, roc_auc_score
 
 
 class VGAEModel(torch.nn.Module):
@@ -34,15 +36,13 @@ class VGAEModel(torch.nn.Module):
         # self.dgt_conv_logstd = GCNConv(2 * out_channels, out_channels, cached=True)
         # self.dd_conv_logstd = GCNConv(2 * out_channels, out_channels, cached=True)
 
-    def forward(self, x1, edge_index1, x2, edge_index2, x3, edge_index3, x4, edge_index4):
-        x = [x1, x2, x3, x4]
-        edge_index = [edge_index1, edge_index2, edge_index3, edge_index4]
+    def forward(self, x, edge_index):
         mu = []
         logstd = []
         for i in range(self.num_graphs):
             x_i = self.convs[i](x[i], edge_index[i])
-            mu_i = self.convs_mu[i](x_i)
-            logstd_i = self.convs_logstd[i](x_i)
+            mu_i = self.convs_mu[i](x_i, edge_index[i])
+            logstd_i = self.convs_logstd[i](x_i, edge_index[i])
             mu.append(mu_i)
             logstd.append(logstd_i)
         return mu, logstd
@@ -56,31 +56,49 @@ class MultiVGAE(VGAE):
 
     def encode(self, *args, **kwargs):
         self.__mu__, self.__logstd__ = self.encoder(*args, **kwargs)
+        self.__logstd__ = [logstd.clamp(max=MAX_LOGSTD) for logstd in self.__logstd__]
         z = [self.reparametrize(mu_i, logstd_i) for mu_i, logstd_i in zip(self.__mu__, self.__logstd__)]
         return z
 
     def kl_loss(self, mu=None, logstd=None):
         mu = self.__mu__ if mu is None else mu
-        logstd = self.__logstd__ if logstd is None else [logstd_i.clamp(max=1.0) for logstd_i in logstd]
+        logstd = self.__logstd__ if logstd is None else [logstd_i.clamp(max=MAX_LOGSTD) for logstd_i in logstd]
 
-        total_loss = 0
+        total_loss = []
         for mu_i, logstd_i in zip(mu, logstd):
             kl = -0.5 * torch.mean(torch.sum(1 + 2 * logstd_i - mu_i ** 2 - logstd_i.exp() ** 2, dim=1))
-            total_loss += kl
+            total_loss.append(kl)
         return total_loss
 
     def recon_loss(self, z, pos_edge_index, neg_edge_index=None):
-
         total_recon_loss = 0
-        for i, z in enumerate(z):
-            pos_edge_index = pos_edge_index[i]
+        for i, z_i in enumerate(z):
+            p_i = pos_edge_index[i]
             if neg_edge_index is None:
-                neg_edge_index = negative_sampling(pos_edge_index, z.size(0))
+                n_i = negative_sampling(p_i, z_i.size(0))
             else:
-                neg_edge_index = neg_edge_index[i]
+                n_i = neg_edge_index[i]
 
-            pos_loss = -torch.log(self.decoder(z, pos_edge_index, sigmoid=True) + 1e-10).mean()
-            neg_loss = -torch.log(1 - self.decoder(z, neg_edge_index, sigmoid=True) + 1e-10).mean()
+            pos_loss = -torch.log(self.decoder(z_i, p_i, sigmoid=True) + EPS).mean()
+            neg_loss = -torch.log(1 - self.decoder(z_i, n_i, sigmoid=True) + EPS).mean()
             total_recon_loss += pos_loss + neg_loss
-
         return total_recon_loss
+
+    def test(self, z, pos_edge_index, neg_edge_index):
+        auc = []
+        ap = []
+        for i, z_i in enumerate(z):
+            pos_y = z_i.new_ones(pos_edge_index[i].size(1))
+            neg_y = z_i.new_zeros(neg_edge_index[i].size(1))
+            y = torch.cat([pos_y, neg_y], dim=0)
+
+            pos_pred = self.decoder(z_i, pos_edge_index[i], sigmoid=True)
+            neg_pred = self.decoder(z_i, neg_edge_index[i], sigmoid=True)
+            pred = torch.cat([pos_pred, neg_pred], dim=0)
+
+            y, pred = y.detach().cpu().numpy(), pred.detach().cpu().numpy()
+
+            auc.append(roc_auc_score(y, pred))
+            ap.append(average_precision_score(y, pred))
+
+        return auc, ap
