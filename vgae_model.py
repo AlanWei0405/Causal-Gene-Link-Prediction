@@ -10,7 +10,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 
 
 class VGAEModel(torch.nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, dropout = 0.9):
         super().__init__()
 
         self.num_graphs = 4  # Number of graphs
@@ -20,6 +20,7 @@ class VGAEModel(torch.nn.Module):
                                        for _ in range(self.num_graphs)])
         self.convs_logstd = nn.ModuleList([GCNConv(2 * out_channels, out_channels, cached=True)
                                            for _ in range(self.num_graphs)])
+        self.dropout = nn.Dropout(dropout)
 
         # self.gg_conv1 = GCNConv(in_channels, 2 * out_channels, cached=True)
         # self.dg_conv1 = GCNConv(in_channels, 2 * out_channels, cached=True)
@@ -40,11 +41,14 @@ class VGAEModel(torch.nn.Module):
         mu = []
         logstd = []
         for i in range(self.num_graphs):
-            x_i = self.convs[i](x[i], edge_index[i])
-            mu_i = self.convs_mu[i](x_i, edge_index[i])
-            logstd_i = self.convs_logstd[i](x_i, edge_index[i])
-            mu.append(mu_i)
-            logstd.append(logstd_i)
+            x_i = self.convs[i](x[i], edge_index[i]).relu()
+            x_i_act = self.dropout(x_i)
+            mu_i = self.convs_mu[i](x_i_act, edge_index[i])
+            mu_i_act = self.dropout(mu_i)
+            logstd_i = self.convs_logstd[i](x_i_act, edge_index[i])
+            logstd_i_act = self.dropout(logstd_i)
+            mu.append(mu_i_act)
+            logstd.append(logstd_i_act)
         return mu, logstd
 
 
@@ -64,11 +68,11 @@ class MultiVGAE(VGAE):
         mu = self.__mu__ if mu is None else mu
         logstd = self.__logstd__ if logstd is None else [logstd_i.clamp(max=MAX_LOGSTD) for logstd_i in logstd]
 
-        total_loss = []
+        total_kl_loss = []
         for mu_i, logstd_i in zip(mu, logstd):
             kl = -0.5 * torch.mean(torch.sum(1 + 2 * logstd_i - mu_i ** 2 - logstd_i.exp() ** 2, dim=1))
-            total_loss.append(kl)
-        return total_loss
+            total_kl_loss.append(kl)
+        return total_kl_loss
 
     def recon_loss(self, z, pos_edge_index, neg_edge_index=None):
         total_recon_loss = 0
@@ -81,7 +85,7 @@ class MultiVGAE(VGAE):
 
             pos_loss = -torch.log(self.decoder(z_i, p_i, sigmoid=True) + EPS).mean()
             neg_loss = -torch.log(1 - self.decoder(z_i, n_i, sigmoid=True) + EPS).mean()
-            total_recon_loss += pos_loss + neg_loss
+            total_recon_loss += (pos_loss + neg_loss)
         return total_recon_loss
 
     def test(self, z, pos_edge_index, neg_edge_index):
