@@ -19,24 +19,24 @@ def run_onheterograph(hetero_data, gene_sum, disease_sum, epoch):
 
     train_data = get_features(train_data)
 
-    gene_bio_embed = np.stack(gene_sum['Embedding'].to_list())
-    disease_bio_embed = np.stack(disease_sum['Embedding'].to_list())
-
-    # Using PCA to reduce dimension
-    pca = PCA(n_components=128)
-    gene_bio_embed = pca.fit_transform(gene_bio_embed)
-    disease_bio_embed = pca.fit_transform(disease_bio_embed)
-
-    additional_gene_features = torch.tensor(gene_bio_embed, dtype=train_data['gene'].x.dtype)
-    additional_disease_features = torch.tensor(disease_bio_embed, dtype=train_data['disease'].x.dtype)
-
-    # # Check dimensions
-    # assert additional_gene_features.size(0) == train_data['gene'].x.size(0), "Mismatch in number of gene nodes"
-    # assert additional_disease_features.size(0) == train_data['disease'].x.size(0), "Mismatch in number of disease nodes"
-
-    # Concatenate features along the feature dimension
-    train_data['gene'].x = torch.cat([train_data['gene'].x, additional_gene_features], dim=1)
-    train_data['disease'].x = torch.cat([train_data['disease'].x, additional_disease_features], dim=1)
+    # gene_bio_embed = np.stack(gene_sum['Embedding'].to_list())
+    # disease_bio_embed = np.stack(disease_sum['Embedding'].to_list())
+    #
+    # # Using PCA to reduce dimension
+    # pca = PCA(n_components=128)
+    # gene_bio_embed = pca.fit_transform(gene_bio_embed)
+    # disease_bio_embed = pca.fit_transform(disease_bio_embed)
+    #
+    # additional_gene_features = torch.tensor(gene_bio_embed, dtype=train_data['gene'].x.dtype)
+    # additional_disease_features = torch.tensor(disease_bio_embed, dtype=train_data['disease'].x.dtype)
+    #
+    # # # Check dimensions
+    # # assert additional_gene_features.size(0) == train_data['gene'].x.size(0), "Mismatch in number of gene nodes"
+    # # assert additional_disease_features.size(0) == train_data['disease'].x.size(0), "Mismatch in number of disease nodes"
+    #
+    # # Concatenate features along the feature dimension
+    # train_data['gene'].x = torch.cat([train_data['gene'].x, additional_gene_features], dim=1)
+    # train_data['disease'].x = torch.cat([train_data['disease'].x, additional_disease_features], dim=1)
 
     # print("Updated gene features shape:", train_data['gene'].x.shape)
     # print("Updated disease features shape:", train_data['disease'].x.shape)
@@ -87,14 +87,13 @@ def run_onheterograph(hetero_data, gene_sum, disease_sum, epoch):
                 model.eval()
                 with torch.no_grad():
                     z = model.encode(test_data.x_dict, test_data.edge_index_dict)
-                    auc, ap, f1_max = model.test(z, test_data[('gene', 'associate', 'disease')].pos_edge_label_index,
+                    auc, ap, f1_max, best_threshold = model.test(z, test_data[('gene', 'associate', 'disease')].pos_edge_label_index,
                                             test_data[('gene', 'associate', 'disease')].neg_edge_label_index)
-                    # hit_at_3_accuracy = model.test_top_k(z,
-                    #                                  test_data[('gene', 'associate', 'disease')].pos_edge_label_index,
-                    #                                  test_data[('gene', 'associate', 'disease')].neg_edge_label_index,
-                    #                                  k=3)
+                    top_at_k_test = model.test_top_k(z, test_data[('gene', 'associate', 'disease')].edge_index,
+                                                     test_data[('gene', 'associate', 'disease')].pos_edge_label_index,
+                                                     k=10, threshold=best_threshold)
                     print(auc, ap, f1_max)
-                    # print(hit_at_3_accuracy)
+                    print(top_at_k_test)
                     auc_list.append(auc)
                     ap_list.append(ap)
 

@@ -65,7 +65,7 @@ class HeteroGAE(GAE):
         return pos_loss + neg_loss
 
     def test(self, z: Tensor, pos_edge_index: Tensor,
-             neg_edge_index: Tensor) -> tuple[float, float, Any]:
+             neg_edge_index: Tensor) -> tuple[float, float, Any, Any]:
 
         z_0 = z['gene']
         z_1 = z['disease']
@@ -93,71 +93,85 @@ class HeteroGAE(GAE):
         print(f"Max F1-Score: {f1_max}")
         print(f"Best Threshold (Max F1-Score): {best_threshold}")
 
-        return auc, ap, f1_max
+        return auc, ap, f1_max, best_threshold
 
-    def test_top_k(self, z: Tensor, pos_edge_index: Tensor, neg_edge_index: Tensor, k=3) -> dict:
-        z_0 = z['gene']
-        z_1 = z['disease']
+    def test_top_k(self, z: Tensor, test_edge_index: Tensor, pos_edge_label_index: Tensor, k, threshold) -> dict:
 
-        # Get predictions for all positive and negative edges
-        pos_pred = self.decoder(z_0, z_1, pos_edge_index, sigmoid=False)
-        # neg_pred = self.decoder(z_0, z_1, neg_edge_index, sigmoid=False)
+        disease_embeddings = z['disease']  # [num_diseases, latent_dim]
+        gene_embeddings = z['gene']  # [num_genes, latent_dim]
 
-        # Combine predictions and indices for sorting
-        pos_edges = list(zip(pos_edge_index[0].tolist(), pos_edge_index[1].tolist()))
-        # neg_edges = list(zip(neg_edge_index[0].tolist(), neg_edge_index[1].tolist()))
+        scores = torch.mm(disease_embeddings, gene_embeddings.T)
+        scores[scores < threshold] = 0
 
-        all_predictions = []
-        for i in range(pos_pred.size(0)):
-            all_predictions.append((pos_edges[i], pos_pred[i].item(), 1))
-        # for i in range(neg_pred.size(0)):
-        #     all_predictions.append((neg_edges[i], neg_pred[i].item(), 0))
+        # 3. Get test edge index for ('disease', 'associated_with', 'gene')
+        num_diseases = disease_embeddings.shape[0]
+        num_genes = gene_embeddings.shape[0]
 
-        # Group predictions by disease
-        disease_predictions = {}
-        for (gene, disease), score, label in all_predictions:
-            if disease not in disease_predictions:
-                disease_predictions[disease] = []
-            disease_predictions[disease].append((gene, score, label))
 
-        precisions, recalls = [], []
-        total_diseases = len(disease_predictions)
 
-        # Calculate metrics for each disease
-        for disease, predictions in disease_predictions.items():
+        # 4. Create test mask
+        test_mask = torch.zeros((num_diseases, num_genes), dtype=torch.bool)
+        test_mask[test_edge_index[1], test_edge_index[0]] = True
 
-            # Sort predictions by score in descending order
-            predictions_sorted = sorted(predictions, key=lambda x: x[1], reverse=True)
+        # 5. Initialize metrics
+        precision, recall, f1, ap = 0.0, 0.0, 0.0, 0.0
+        valid_diseases = []
 
-            # Extract top k predictions
-            top_k_predictions = predictions_sorted[:k]
-            top_k_genes = set(gene for gene, _, _ in top_k_predictions)
+        for disease in range(num_diseases):
+            # True pathogenic genes for this disease
+            true_genes = pos_edge_label_index[0][pos_edge_label_index[1] == disease].tolist()
+            if len(true_genes) == 0:
+                continue
+            valid_diseases.append(disease)
 
-            # Get true positive genes
-            true_positives = set(gene for gene, _, label in predictions_sorted if label == 1)
+        # 6. Perform Top@i evaluation for each disease
+        for disease in valid_diseases:
+            # Get scores for this disease
+            disease_scores = scores[disease]  # [num_genes]
+            # Use the test_mask to identify relevant gene indices
+            valid_gene_indices = torch.where(test_mask[disease] == False)[0]
 
-            # Safeguard against division by zero
-            num_true_positives_in_top_k = len(top_k_genes & true_positives)
-            num_top_k = len(top_k_genes)
-            num_true_positives = len(true_positives)
+            # Get scores only for valid (test) gene indices
+            valid_scores = disease_scores[valid_gene_indices]
+            # Sort gene indices by score
+            top_indices = torch.argsort(valid_scores, descending=True)[:k]
 
-            # Compute precision and recall
-            precision = (num_true_positives_in_top_k / num_top_k if num_top_k > 0 else 0)
-            recall = (num_true_positives_in_top_k / num_true_positives if num_true_positives > 0 else 0)
+            # R(d)
+            top_genes = valid_gene_indices[top_indices].tolist()
+            # T(d) True pathogenic genes for this disease
+            true_genes = pos_edge_label_index[0][pos_edge_label_index[1] == disease].tolist()
 
-            precisions.append(precision)
-            recalls.append(recall)
+            # Compute intersection
+            true_positives = len(set(top_genes) & set(true_genes))
 
-        # Average metrics across diseases
-        precision_avg = np.mean(precisions)
-        recall_avg = np.mean(recalls)
-        f1 = (
-            2 * precision_avg * recall_avg / (precision_avg + recall_avg)
-            if (precision_avg + recall_avg) > 0
-            else 0
-        )
+            # Precision, Recall, and F1 for this disease
+            local_precision = true_positives / k
+            local_recall = true_positives / len(true_genes) if len(true_genes) > 0 else 0
+            local_f1 = ((2 * local_precision * local_recall) /
+                        (local_precision + local_recall + 1e-8)) if (local_precision + local_recall) > 0 else 0
 
-        return {"Precision": precision_avg, "Recall": recall_avg, "F1-score": f1}
+            # Update global metrics
+            precision += local_precision
+            recall += local_recall
+            f1 += local_f1
+
+            # Association Precision (AP)
+            ap += true_positives / min(len(top_genes), k)
+
+        # 7. Average metrics over all diseases
+        num_d_set = float(len(valid_diseases))
+        precision /= num_d_set
+        recall /= num_d_set
+        f1 /= num_d_set
+        ap /= num_d_set
+
+        return {
+            "Precision": precision,
+            "Recall": recall,
+            "F1": f1,
+            "AP": ap
+        }
+
 
 
 
