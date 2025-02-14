@@ -28,13 +28,14 @@ def split_data(hetero_data_raw, runtime_type = 'heterogeneous'):
 
     else:
         hetero_data = hetero_data_raw.coalesce()
+
         hetero_data = T.ToUndirected()(hetero_data)
 
         transform = T.RandomLinkSplit(
             num_val=0.1,
             num_test=0.2,
             disjoint_train_ratio=0.3,
-            neg_sampling_ratio=50.0,
+            neg_sampling_ratio=1.0,
             split_labels=True,
             add_negative_train_samples=True,
             edge_types=('gene', 'associate', 'disease'),

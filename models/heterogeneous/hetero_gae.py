@@ -95,26 +95,23 @@ class HeteroGAE(GAE):
 
         return auc, ap, f1_max, best_threshold
 
-    def test_top_k(self, z: Tensor, test_edge_index: Tensor, pos_edge_label_index: Tensor, k, threshold) -> dict:
+    def test_top_k(self, z: Tensor, test_edge_index: Tensor, pos_edge_label_index: Tensor, k) -> dict:
 
         disease_embeddings = z['disease']  # [num_diseases, latent_dim]
         gene_embeddings = z['gene']  # [num_genes, latent_dim]
 
         scores = torch.mm(disease_embeddings, gene_embeddings.T)
-        scores[scores < threshold] = 0
 
         # 3. Get test edge index for ('disease', 'associated_with', 'gene')
         num_diseases = disease_embeddings.shape[0]
         num_genes = gene_embeddings.shape[0]
-
-
 
         # 4. Create test mask
         test_mask = torch.zeros((num_diseases, num_genes), dtype=torch.bool)
         test_mask[test_edge_index[1], test_edge_index[0]] = True
 
         # 5. Initialize metrics
-        precision, recall, f1, ap = 0.0, 0.0, 0.0, 0.0
+        precision, recall= 0.0, 0.0
         valid_diseases = []
 
         for disease in range(num_diseases):
@@ -124,6 +121,7 @@ class HeteroGAE(GAE):
                 continue
             valid_diseases.append(disease)
 
+        true_pos_list = []
         # 6. Perform Top@i evaluation for each disease
         for disease in valid_diseases:
             # Get scores for this disease
@@ -141,29 +139,28 @@ class HeteroGAE(GAE):
             # T(d) True pathogenic genes for this disease
             true_genes = pos_edge_label_index[0][pos_edge_label_index[1] == disease].tolist()
 
-            # Compute intersection
+            # Compute the intersection between T(d) and R(d)
             true_positives = len(set(top_genes) & set(true_genes))
 
-            # Precision, Recall, and F1 for this disease
+            # Precision and recall for this disease
             local_precision = true_positives / k
-            local_recall = true_positives / len(true_genes) if len(true_genes) > 0 else 0
-            local_f1 = ((2 * local_precision * local_recall) /
-                        (local_precision + local_recall + 1e-8)) if (local_precision + local_recall) > 0 else 0
+            local_recall = true_positives / len(true_genes)
 
             # Update global metrics
             precision += local_precision
             recall += local_recall
-            f1 += local_f1
 
             # Association Precision (AP)
-            ap += true_positives / min(len(top_genes), k)
+            true_pos_list.append(true_positives)
 
-        # 7. Average metrics over all diseases
+        # Compute the overall metrics
         num_d_set = float(len(valid_diseases))
+
         precision /= num_d_set
         recall /= num_d_set
-        f1 /= num_d_set
-        ap /= num_d_set
+
+        f1 = (2 * precision * recall) / (precision + recall + 1e-8)
+        ap = np.sum(true_pos_list) / (num_d_set * k)
 
         return {
             "Precision": precision,
@@ -171,7 +168,3 @@ class HeteroGAE(GAE):
             "F1": f1,
             "AP": ap
         }
-
-
-
-

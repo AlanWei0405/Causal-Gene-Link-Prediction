@@ -6,6 +6,11 @@ from torch_geometric.nn import MetaPath2Vec
 
 def get_features(train_data):
 
+    num_nodes_dict = {
+        "gene": train_data["gene"].x.shape[0],
+        "disease": train_data["disease"].x.shape[0]
+    }
+
     metapath = [
         ('gene', 'interact', 'gene'),
         ('gene', 'associate', 'disease'),
@@ -25,6 +30,7 @@ def get_features(train_data):
         model = MetaPath2Vec(train_data.edge_index_dict, embedding_dim=128,
                              metapath=metapath, walk_length=25, context_size=7,
                              walks_per_node=3, num_negative_samples=1,
+                             num_nodes_dict=num_nodes_dict,
                              sparse=True).to(device)
 
         loader = model.loader(batch_size=128, shuffle=True, num_workers=0)
@@ -88,6 +94,7 @@ def save_metapath2vec_model(model, file_path):
         'context_size': model.context_size,
         'walks_per_node': model.walks_per_node,
         'num_negative_samples': model.num_negative_samples,
+        'num_nodes_dict': model.num_nodes_dict,
         'sparse': True
     }, file_path)
 
@@ -101,6 +108,7 @@ def load_metapath2vec_model(file_path, edge_index_dict, device):
         context_size=checkpoint['context_size'],
         walks_per_node=checkpoint['walks_per_node'],
         num_negative_samples=checkpoint['num_negative_samples'],
+        num_nodes_dict=checkpoint['num_nodes_dict'],
         sparse=checkpoint['sparse']
     ).to(device)
     model.load_state_dict(checkpoint['state_dict'])

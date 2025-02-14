@@ -6,7 +6,7 @@ from torch_geometric.nn import GATConv
 class GATEncoder(torch.nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super().__init__()
-        self.conv1 = GATConv((-1, -1), hidden_channels, add_self_loops=False, heads=1, dropout=0.9)
+        self.conv1 = GATConv((-1, -1), hidden_channels, add_self_loops=False, heads=2, dropout=0.9)
         self.conv2 = GATConv((-1, -1), out_channels, add_self_loops=False, heads=1)
 
     def forward(self, x, edge_index):

@@ -1,5 +1,5 @@
 from models.heterogeneous.run_onHeteroGraph import run_onheterograph
-from models.run_logistic_regression import run_logistic_regression
+from models.run_ml_models import run_ml_models
 from utils.build_networks import build_networks
 from utils.get_biobert_em import get_biobert_em
 from utils.get_disease_summary import create_disease_summary_df
@@ -29,7 +29,8 @@ def main():
 
     ppi_nt, dd_nt, dg_nt, dgt_nt, all_nt, hetero_data = build_networks(ppi_data, dd_data, dg_data)
 
-    # run_logistic_regression(hetero_data, epoch)
+    # Choose the model to run
+    # run_ml_models(hetero_data, gene_sum, disease_sum)
     # run_onsinglegraph(hetero_data, epoch)
     run_onheterograph(hetero_data, gene_sum, disease_sum, epoch)
 
