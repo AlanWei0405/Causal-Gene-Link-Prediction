@@ -102,15 +102,15 @@ class HeteroGAE(GAE):
 
         scores = torch.mm(disease_embeddings, gene_embeddings.T)
 
-        # 3. Get test edge index for ('disease', 'associated_with', 'gene')
+        # Get test edge index for ('disease', 'associated_with', 'gene')
         num_diseases = disease_embeddings.shape[0]
         num_genes = gene_embeddings.shape[0]
 
-        # 4. Create test mask
+        # Create test mask
         test_mask = torch.zeros((num_diseases, num_genes), dtype=torch.bool)
         test_mask[test_edge_index[1], test_edge_index[0]] = True
 
-        # 5. Initialize metrics
+        # Initialize metrics
         precision, recall= 0.0, 0.0
         valid_diseases = []
 
@@ -122,7 +122,8 @@ class HeteroGAE(GAE):
             valid_diseases.append(disease)
 
         true_pos_list = []
-        # 6. Perform Top@i evaluation for each disease
+
+        # Perform Top@i evaluation for each disease
         for disease in valid_diseases:
             # Get scores for this disease
             disease_scores = scores[disease]  # [num_genes]
