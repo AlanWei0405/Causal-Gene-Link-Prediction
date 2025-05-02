@@ -6,7 +6,7 @@ import time
 from openai import OpenAI
 
 
-client = OpenAI(api_key="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")
+client = OpenAI()
 
 def generate_embeddings_batch_openai(text_list, model="text-embedding-3-small", max_retries=5):
     embeddings = []
