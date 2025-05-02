@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import torch
 from tqdm import tqdm
 from matplotlib import pyplot as plt
@@ -25,6 +27,8 @@ def run_onheterograph(hetero_data, gene_sum, disease_sum, epoch, reducing_edges,
 
     if embedding_mode == "fusion":
         train_data = combine_features(disease_sum, gene_sum, train_data)
+    if embedding_mode == "biobert":
+        train_data = combine_features(disease_sum, gene_sum, train_data, replace=True)
 
     # print("Updated gene features shape:", train_data['gene'].x.shape)
     # print("Updated disease features shape:", train_data['disease'].x.shape)
@@ -38,9 +42,9 @@ def run_onheterograph(hetero_data, gene_sum, disease_sum, epoch, reducing_edges,
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Choose the encoder for VGAE
-    encoder = to_hetero(GraphConvEncoder(64, 32), hetero_data.metadata(), 'sum')
+    # encoder = to_hetero(GraphConvEncoder(64, 32), hetero_data.metadata(), 'sum')
     encoder = to_hetero(SAGEEncoder(64, 32), hetero_data.metadata(), 'sum')
-    encoder = to_hetero(GATEncoder(64, 32), hetero_data.metadata(), 'sum')
+    # encoder = to_hetero(GATEncoder(64, 32), hetero_data.metadata(), 'sum')
 
     model = HeteroGAE(encoder).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)

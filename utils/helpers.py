@@ -3,7 +3,7 @@ import torch
 from sklearn.decomposition import PCA
 
 
-def combine_features(disease_sum, gene_sum, train_data):
+def combine_features(disease_sum, gene_sum, train_data, replace=False):
 
     gene_bio_embed = np.stack(gene_sum['Embedding'].to_list())
     disease_bio_embed = np.stack(disease_sum['Embedding'].to_list())
@@ -15,9 +15,14 @@ def combine_features(disease_sum, gene_sum, train_data):
     additional_gene_features = torch.tensor(gene_bio_embed, dtype=train_data['gene'].x.dtype)
     additional_disease_features = torch.tensor(disease_bio_embed, dtype=train_data['disease'].x.dtype)
 
-    # Concatenate topological and biobert features along the feature dimension
-    train_data['gene'].x = torch.cat([train_data['gene'].x, additional_gene_features], dim=1)
-    train_data['disease'].x = torch.cat([train_data['disease'].x, additional_disease_features], dim=1)
+    if replace:
+        # Concatenate topological and biobert features along the feature dimension
+        train_data['gene'].x = additional_gene_features
+        train_data['disease'].x = additional_disease_features
+    else:
+        # Concatenate topological and biobert features along the feature dimension
+        train_data['gene'].x = torch.cat([train_data['gene'].x, additional_gene_features], dim=1)
+        train_data['disease'].x = torch.cat([train_data['disease'].x, additional_disease_features], dim=1)
 
     return train_data
 

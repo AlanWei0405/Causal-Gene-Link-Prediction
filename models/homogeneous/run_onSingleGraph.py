@@ -16,8 +16,9 @@ def run_onsinglegraph(hetero_data, epoch):
 
     encoder = GCNEncoder(128, 32)
     # encoder = VariationalGCNEncoder(128, 32)
-    model = GAE(encoder).to(device)
+    # model = GAE(encoder).to(device)
     # model = VGAE(encoder).to(device)
+    model = GAE(encoder).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
 
     train_losses=[]

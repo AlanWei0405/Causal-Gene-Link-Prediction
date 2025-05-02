@@ -82,7 +82,3 @@ def get_biobert_em(gene_sum, disease_sum):
         disease_sum.to_pickle("disease_embeddings.pkl")
 
     return gene_sum, disease_sum
-
-
-
-
